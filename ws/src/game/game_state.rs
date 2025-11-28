@@ -5,7 +5,7 @@ pub enum GameStatus {
     Waiting,
     InProgress,
     Finished,
-    Abondoned,
+    Abandoned,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]

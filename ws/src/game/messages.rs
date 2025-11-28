@@ -4,7 +4,7 @@ use crate::game::game_state::GameState;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type")]
-pub enum WsGameMessage {
+pub enum WsClientMessage {
     #[serde(rename = "create_game")]
     CreateGame { player_id: String },
 
@@ -13,7 +13,11 @@ pub enum WsGameMessage {
 
     #[serde(rename = "make_move")]
     MakeMove { game_id: String, position: usize },
+}
 
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(tag = "type")]
+pub enum WsServerMessage {
     #[serde(rename = "game_state")]
     GameState { game: GameState },
 
