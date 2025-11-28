@@ -49,6 +49,24 @@ impl WsManager {
             .await?;
         Ok(())
     }
+    pub async fn broadcast_to_all(
+        &self,
+        game_id: &str,
+        message: &str,
+        sender_session_id: &str,
+    ) -> Result<()> {
+        if let Some(game_sessions) = self.registry.games.get(game_id) {
+            if let Some(sender_tx) = game_sessions.value().get(sender_session_id) {
+                let _ = sender_tx.send(message.to_string());
+            }
+        }
+
+        self.pubsub
+            .publish(game_id, message, sender_session_id)
+            .await?;
+
+        Ok(())
+    }
 }
 
 pub async fn start_manager(redis_url: &str) -> anyhow::Result<Arc<WsManager>> {

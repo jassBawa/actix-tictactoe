@@ -94,7 +94,6 @@ async fn handle_message(
             // Clients shouldn't send this; ignore
         }
         Err(_) => {
-            // Fallback: treat as raw text broadcast (optional)
             manager
                 .broadcast_except_sender(game_id, &raw, session_id)
                 .await?;
@@ -112,8 +111,9 @@ async fn broadcast_state(
 ) -> anyhow::Result<()> {
     let payload = WsGameMessage::GameState { game };
     let json = serde_json::to_string(&payload)?;
+
     manager
-        .broadcast_except_sender(game_id, &json, sender_session_id)
+        .broadcast_to_all(game_id, &json, sender_session_id)
         .await?;
     Ok(())
 }
