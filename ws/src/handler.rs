@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use crate::{
-    game::messages::{WsClientMessage, WsServerMessage},
+    game::{
+        self,
+        messages::{WsClientMessage, WsServerMessage},
+    },
     manager::WsManager,
 };
 use actix_web::{rt, web, Error, HttpRequest, HttpResponse};
@@ -84,7 +87,24 @@ async fn handle_message(
                 }
             }
         }
-        Ok(WsClientMessage::JoinGame { player_id, game_id }) => {
+        Ok(WsClientMessage::JoinGame {
+            player_id,
+            game_id: payload_game_id,
+        }) => {
+            if payload_game_id != game_id {
+                send_error(
+                    manager,
+                    game_id,
+                    session_id,
+                    &format!(
+                        "Game id mismatch: path = {}, payload={}",
+                        game_id, payload_game_id
+                    ),
+                )
+                .await?;
+                return Ok(());
+            }
+
             match manager
                 .game_manager
                 .join_game(&game_id, player_id, session_id.to_string())
@@ -104,7 +124,23 @@ async fn handle_message(
                 }
             }
         }
-        Ok(WsClientMessage::MakeMove { game_id, position }) => {
+        Ok(WsClientMessage::MakeMove {
+            game_id: payload_game_id,
+            position,
+        }) => {
+            if payload_game_id != game_id {
+                send_error(
+                    manager,
+                    game_id,
+                    session_id,
+                    &format!(
+                        "Game id mismatch: path = {}, payload={}",
+                        game_id, payload_game_id
+                    ),
+                )
+                .await?;
+                return Ok(());
+            }
             match manager
                 .game_manager
                 .make_move(&game_id, session_id, position)
