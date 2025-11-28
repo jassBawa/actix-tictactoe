@@ -18,5 +18,4 @@ dotenvy.workspace = true
 bcrypt = "0.17.1"
 jsonwebtoken = {version =  "10.2.0", features=["rust_crypto"]}
 chrono = "0.4.42"
-actix-web-actors = "4.3.1"
 rand = "0.9.2"
