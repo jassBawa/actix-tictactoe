@@ -15,44 +15,45 @@ pub async fn upgrade(
 ) -> Result<HttpResponse, Error> {
     let game_id = path_game_id.into_inner();
 
-    let room = manager.get_or_create_room(&game_id).await;
-
     let (res, mut session, mut incoming) = actix_ws::handle(&req, body)?;
 
     let session_id = Uuid::new_v4().to_string();
-
     let (tx, mut rx) = mpsc::unbounded_channel::<String>();
 
-    {
-        let mut room = room.lock().await;
-        room.join(session_id.clone(), tx);
-    }
+    manager.registry.add(&game_id, &session_id, tx.clone());
 
     rt::spawn({
-        let room = Arc::clone(&room);
+        let manager = manager.clone();
+        let game_id = game_id.clone();
         let session_id = session_id.clone();
 
         async move {
             while let Some(Ok(msg)) = incoming.next().await {
                 match msg {
                     Message::Text(text) => {
-                        let room = room.lock().await;
-                        room.broadcast(text.to_string());
+                        let msg_str = text.to_string();
+
+                        if let Err(e) = manager
+                            .broadcast_except_sender(&game_id, &msg_str, &session_id)
+                            .await
+                        {
+                            eprintln!("Broadcast error: {}", e);
+                        }
                     }
                     Message::Close(_) => break,
                     _ => {}
                 }
             }
-
-            // Remove client on disconnect
-            let mut room = room.lock().await;
-            room.leave(&session_id);
+            manager.registry.remove(&game_id, &session_id);
         }
     });
 
     tokio::spawn(async move {
         while let Some(outgoing) = rx.recv().await {
-            let _ = session.text(outgoing).await;
+            if let Err(e) = session.text(outgoing).await {
+                eprintln!("Failed to send message: {}", e);
+                break;
+            }
         }
     });
 

@@ -1,4 +1,5 @@
 pub mod handler;
 pub mod manager;
-pub mod messages;
-pub mod room;
+
+pub mod connection_registry;
+pub mod pubsub;
