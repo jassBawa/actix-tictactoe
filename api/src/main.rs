@@ -17,7 +17,13 @@ async fn main() -> Result<()> {
         .await
         .expect("Failed to create DB pool");
 
-    let ws_manager = web::Data::new(manager::start_manager());
+    let redis_url = env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+
+    let ws_manager = web::Data::new(
+        manager::start_manager(&redis_url)
+            .await
+            .expect("Failed to create ws manager"),
+    );
 
     let pool_data = web::Data::new(db_pool);
 
