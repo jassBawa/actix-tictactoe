@@ -5,6 +5,7 @@ use db::pool::DbPool;
 
 use dotenvy::dotenv;
 use tic_tac::routes::{self};
+use ws::manager;
 
 #[actix_web::main]
 async fn main() -> Result<()> {
@@ -16,13 +17,17 @@ async fn main() -> Result<()> {
         .await
         .expect("Failed to create DB pool");
 
+    let ws_manager = web::Data::new(manager::start_manager());
+
     let pool_data = web::Data::new(db_pool);
 
     HttpServer::new(move || {
         App::new()
             .app_data(pool_data.clone())
+            .app_data(ws_manager.clone())
             .configure(routes::auth::config)
             .configure(routes::game::config)
+            .configure(|cfg| routes::websocket::config(cfg, ws_manager.clone()))
             .route(
                 "/ping",
                 web::get().to(|| async { HttpResponse::Ok().body("pong") }),
