@@ -1,17 +1,26 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
+use redis::Client;
 use std::sync::Arc;
 
 use crate::connection_registry::ConnectionRegistry;
+use crate::game::game_manager::GameManager;
 use crate::pubsub::PubSub;
 
 pub struct WsManager {
     pub registry: Arc<ConnectionRegistry>,
     pub pubsub: Arc<PubSub>,
+    pub game_manager: Arc<GameManager>,
 }
 
 impl WsManager {
     pub async fn new(redis_url: &str) -> Result<Self> {
         let registry = Arc::new(ConnectionRegistry::new());
+
+        let redis_client = Arc::new(
+            Client::open(redis_url).context("Failed to create redis client for gamemanager")?,
+        );
+
+        let game_manager = Arc::new(GameManager::new(Arc::clone(&redis_client)));
         let pubsub = PubSub::new(redis_url, Arc::clone(&registry)).await?;
 
         let pubsub_for_subscriber = pubsub.clone();
@@ -25,6 +34,7 @@ impl WsManager {
         Ok(Self {
             registry,
             pubsub: Arc::new(pubsub),
+            game_manager,
         })
     }
 

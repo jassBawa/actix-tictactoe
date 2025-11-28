@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::manager::WsManager;
+use crate::{game::messages::WsGameMessage, manager::WsManager};
 use actix_web::{rt, web, Error, HttpRequest, HttpResponse};
 use actix_ws::Message;
 use futures_util::StreamExt;
@@ -31,16 +31,12 @@ pub async fn upgrade(
             while let Some(Ok(msg)) = incoming.next().await {
                 match msg {
                     Message::Text(text) => {
-                        let msg_str = text.to_string();
-
-                        if let Err(e) = manager
-                            .broadcast_except_sender(&game_id, &msg_str, &session_id)
-                            .await
+                        if let Err(e) =
+                            handle_message(&manager, &game_id, &session_id, text.to_string()).await
                         {
-                            eprintln!("Broadcast error: {}", e);
+                            eprintln!("Message handling error: {}", e);
                         }
                     }
-                    Message::Close(_) => break,
                     _ => {}
                 }
             }
@@ -58,4 +54,66 @@ pub async fn upgrade(
     });
 
     Ok(res)
+}
+
+async fn handle_message(
+    manager: &Arc<WsManager>,
+    game_id: &str,
+    session_id: &str,
+    raw: String,
+) -> anyhow::Result<()> {
+    match serde_json::from_str::<WsGameMessage>(&raw) {
+        Ok(WsGameMessage::CreateGame { player_id }) => {
+            let game = manager
+                .game_manager
+                .create_game(player_id, session_id.to_string(), game_id.to_string())
+                .await?;
+
+            broadcast_state(manager, game_id, session_id, game).await?;
+        }
+        Ok(WsGameMessage::JoinGame { player_id, game_id }) => {
+            let game = manager
+                .game_manager
+                .join_game(&game_id, player_id, session_id.to_string())
+                .await?;
+
+            broadcast_state(manager, &game_id, session_id, game).await?;
+        }
+        Ok(WsGameMessage::MakeMove { game_id, position }) => {
+            let game = manager
+                .game_manager
+                .make_move(&game_id, session_id, position)
+                .await?;
+
+            broadcast_state(manager, &game_id, session_id, game).await?;
+        }
+        Ok(WsGameMessage::GameState { .. }) => {
+            // Messages of this type should come from the server only; ignore
+        }
+        Ok(WsGameMessage::Error { .. }) => {
+            // Clients shouldn't send this; ignore
+        }
+        Err(_) => {
+            // Fallback: treat as raw text broadcast (optional)
+            manager
+                .broadcast_except_sender(game_id, &raw, session_id)
+                .await?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn broadcast_state(
+    manager: &Arc<WsManager>,
+    game_id: &str,
+    sender_session_id: &str,
+    game: crate::game::game_state::GameState,
+) -> anyhow::Result<()> {
+    let payload = WsGameMessage::GameState { game };
+    let json = serde_json::to_string(&payload)?;
+    manager
+        .broadcast_except_sender(game_id, &json, sender_session_id)
+        .await?;
+    Ok(())
 }
