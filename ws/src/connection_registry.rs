@@ -32,11 +32,10 @@ impl ConnectionRegistry {
 
     pub fn broadcast_except(&self, game_id: &str, msg: &str, exclude_session_id: &str) {
         if let Some(game) = self.games.get(game_id) {
-            for entry in game.value().iter() {
-                let session_id = entry.key();
+            for r in game.iter() {
+                let (session_id, tx) = r.pair();
 
                 if session_id != exclude_session_id {
-                    let tx = entry.value();
                     let _ = tx.send(msg.to_string());
                 }
             }

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum GameStatus {
@@ -24,26 +25,29 @@ pub type Board = [[Option<Player>; 3]; 3];
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GameState {
     pub id: String,
-    pub player1_id: String,
+    pub player1_id: Uuid,
+    pub player2_id: Option<Uuid>,
+
     pub player1_session: String,
-    pub player2_id: Option<String>,
     pub player2_session: Option<String>,
-    pub current_turn: Option<String>,
+
+    pub current_turn: Option<Uuid>,
+
     pub status: GameStatus,
     pub board: Board,
-    pub winner: Option<String>,
+    pub winner: Option<Uuid>,
     pub created_at: i64,
 }
 
 impl GameState {
-    pub fn new(game_id: String, player1_id: String, player1_session: String) -> Self {
+    pub fn new(game_id: String, player1_id: Uuid, player1_session: String) -> Self {
         Self {
             id: game_id,
             player1_id,
-            player1_session: player1_session.clone(),
+            player1_session,
             player2_id: None,
             player2_session: None,
-            current_turn: Some(player1_session.clone()),
+            current_turn: Some(player1_id),
             status: GameStatus::Waiting,
             board: [[None; 3]; 3],
             winner: None,
@@ -51,17 +55,17 @@ impl GameState {
         }
     }
 
-    pub fn get_player_symbol(&self, session_id: &str) -> Option<Player> {
-        if self.player1_session == session_id {
+    pub fn get_player_symbol(&self, user_id: Uuid) -> Option<Player> {
+        if self.player1_id == user_id {
             Some(Player::X)
-        } else if self.player2_session.as_ref() == Some(&session_id.to_string()) {
+        } else if self.player2_id == Some(user_id) {
             Some(Player::O)
         } else {
             None
         }
     }
 
-    pub fn is_player_turn(&self, session_id: &str) -> bool {
-        self.current_turn.as_ref() == Some(&session_id.to_string())
+    pub fn is_player_turn(&self, user_id: Uuid) -> bool {
+        self.current_turn == Some(user_id)
     }
 }

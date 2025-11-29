@@ -1,10 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    game::{
-        self,
-        messages::{WsClientMessage, WsServerMessage},
-    },
+    game::messages::{WsClientMessage, WsServerMessage},
     manager::WsManager,
 };
 use actix_web::{rt, web, Error, HttpRequest, HttpResponse};
@@ -18,6 +15,7 @@ pub async fn upgrade(
     body: web::Payload,
     path_game_id: web::Path<String>,
     manager: web::Data<Arc<WsManager>>,
+    user_id: Uuid,
 ) -> anyhow::Result<HttpResponse, Error> {
     let game_id = path_game_id.into_inner();
 
@@ -32,13 +30,20 @@ pub async fn upgrade(
         let manager = manager.clone();
         let game_id = game_id.clone();
         let session_id = session_id.clone();
+        let user_id = user_id;
 
         async move {
             while let Some(Ok(msg)) = incoming.next().await {
                 match msg {
                     Message::Text(text) => {
-                        if let Err(e) =
-                            handle_message(&manager, &game_id, &session_id, text.to_string()).await
+                        if let Err(e) = handle_message(
+                            &manager,
+                            &game_id,
+                            &session_id,
+                            user_id,
+                            text.to_string(),
+                        )
+                        .await
                         {
                             eprintln!("Message handling error: {}", e);
                         }
@@ -66,13 +71,14 @@ async fn handle_message(
     manager: &Arc<WsManager>,
     game_id: &str,
     session_id: &str,
+    user_id: Uuid,
     raw: String,
 ) -> anyhow::Result<()> {
     match serde_json::from_str::<WsClientMessage>(&raw) {
-        Ok(WsClientMessage::CreateGame { player_id }) => {
+        Ok(WsClientMessage::CreateGame) => {
             match manager
                 .game_manager
-                .create_game(player_id, session_id.to_string(), game_id.to_string())
+                .create_game(user_id, session_id.to_string(), game_id.to_string())
                 .await
             {
                 Ok(game) => broadcast_state(manager, game_id, session_id, game).await?,
@@ -87,31 +93,14 @@ async fn handle_message(
                 }
             }
         }
-        Ok(WsClientMessage::JoinGame {
-            player_id,
-            game_id: payload_game_id,
-        }) => {
-            if payload_game_id != game_id {
-                send_error(
-                    manager,
-                    game_id,
-                    session_id,
-                    &format!(
-                        "Game id mismatch: path = {}, payload={}",
-                        game_id, payload_game_id
-                    ),
-                )
-                .await?;
-                return Ok(());
-            }
-
+        Ok(WsClientMessage::JoinGame) => {
             match manager
                 .game_manager
-                .join_game(&game_id, player_id, session_id.to_string())
+                .join_game(game_id, user_id, session_id.to_string())
                 .await
             {
                 Ok(game) => {
-                    broadcast_state(manager, &game_id, session_id, game).await?;
+                    broadcast_state(manager, game_id, session_id, game).await?;
                 }
                 Err(e) => {
                     send_error(
@@ -124,30 +113,14 @@ async fn handle_message(
                 }
             }
         }
-        Ok(WsClientMessage::MakeMove {
-            game_id: payload_game_id,
-            position,
-        }) => {
-            if payload_game_id != game_id {
-                send_error(
-                    manager,
-                    game_id,
-                    session_id,
-                    &format!(
-                        "Game id mismatch: path = {}, payload={}",
-                        game_id, payload_game_id
-                    ),
-                )
-                .await?;
-                return Ok(());
-            }
+        Ok(WsClientMessage::MakeMove { position }) => {
             match manager
                 .game_manager
-                .make_move(&game_id, session_id, position)
+                .make_move(game_id, user_id, position)
                 .await
             {
                 Ok(game) => {
-                    broadcast_state(manager, &game_id, session_id, game).await?;
+                    broadcast_state(manager, game_id, session_id, game).await?;
                 }
                 Err(e) => {
                     send_error(

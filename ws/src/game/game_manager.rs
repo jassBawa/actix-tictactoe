@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use redis::{AsyncTypedCommands, Client};
 use std::sync::Arc;
+use uuid::Uuid;
 
 use crate::game::{
     game_logic::GameEngine,
@@ -19,7 +20,7 @@ impl GameManager {
 
     pub async fn create_game(
         &self,
-        player1_id: String,
+        player1_id: Uuid,
         player1_session: String,
         game_id: String,
     ) -> Result<GameState> {
@@ -55,7 +56,7 @@ impl GameManager {
     pub async fn join_game(
         &self,
         game_id: &str,
-        player2_id: String,
+        player2_id: Uuid,
         player2_session: String,
     ) -> Result<GameState> {
         let mut game = self.get_game(game_id).await?.context("Game not found")?;
@@ -75,7 +76,7 @@ impl GameManager {
     pub async fn make_move(
         &self,
         game_id: &str,
-        session_id: &str,
+        user_id: Uuid,
         position: usize,
     ) -> Result<GameState> {
         let mut game = self.get_game(game_id).await?.context("Game not found")?;
@@ -84,13 +85,11 @@ impl GameManager {
             anyhow::bail!("Game is not in progress");
         }
 
-        if !game.is_player_turn(session_id) {
+        if !game.is_player_turn(user_id) {
             anyhow::bail!("Not your turn");
         }
 
-        let player = game
-            .get_player_symbol(session_id)
-            .context("Invalid player")?;
+        let player = game.get_player_symbol(user_id).context("Invalid player")?;
 
         GameEngine::make_move(&mut game.board, position, player)
             .map_err(|e| anyhow::anyhow!("{:?}", e))?;
@@ -100,11 +99,11 @@ impl GameManager {
         match winner {
             Some(Player::X) => {
                 game.status = GameStatus::Finished;
-                game.winner = Some(game.player1_session.clone());
+                game.winner = Some(game.player1_id);
             }
             Some(Player::O) => {
                 game.status = GameStatus::Finished;
-                game.winner = game.player2_session.clone();
+                game.winner = game.player2_id;
             }
             None if GameEngine::is_board_full(&game.board) => {
                 game.status = GameStatus::Finished;
@@ -112,10 +111,10 @@ impl GameManager {
             }
 
             None => {
-                let next = if session_id == game.player1_session {
-                    game.player2_session.clone().unwrap()
+                let next = if user_id == game.player1_id {
+                    game.player2_id.expect("player2 must exist")
                 } else {
-                    game.player1_session.clone()
+                    game.player1_id
                 };
                 game.current_turn = Some(next);
             }
